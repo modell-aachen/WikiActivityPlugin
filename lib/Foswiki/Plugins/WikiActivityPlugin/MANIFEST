@@ -1,3 +1,4 @@
 !noci
 data/System/WikiActivityPlugin.txt 0644 Plugin doc page
 lib/Foswiki/Plugins/WikiActivityPlugin.pm 0444 Plugin Perl module
+lib/Foswiki/Plugins/WikiActivityPlugin/Config.spec 0444 Spec file
