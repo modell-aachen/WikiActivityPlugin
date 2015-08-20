@@ -287,21 +287,21 @@ sub restSubscribedEventsCount {
     _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
     _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
     _sqlswitch('to', defined $q->param('to'), $sql, \@args, $q->param('to'));
-    _writejson($q, $response, db()->selectrow_hashref($sql, {}, @args));
+    _writejson($q, $response, {
+        status => 'success',
+        data => db()->selectrow_hashref($sql, {}, @args)
+    });
 }
 
 sub restSubscribe {
     my ($session, $subject, $verb, $response) = @_;
     my $q = $session->{request};
-    my $user = $session->{user};
     my $base = $q->param('base');
-    _insert('subscriptions', {
+    addSubscription(
         base => $base,
-        user_id => $user,
         sub_type => 'subscription',
-        one_time => 0,
-    });
-    '{"status":"success"}';
+    );
+    _writejson({status => 'success'});
 }
 sub restUnsubscribe {
     my ($session, $subject, $verb, $response) = @_;
@@ -311,7 +311,7 @@ sub restUnsubscribe {
     db()->do("DELETE FROM subscriptions WHERE base=? AND user_id=?", {},
         $base, $user
     );
-    '{"status":"success"}';
+    _writejson({status => 'success'});
 }
 sub restUpdateSubscription {
     my ($session, $subject, $verb, $response) = @_;
@@ -326,7 +326,7 @@ sub restUpdateSubscription {
     my @args = ($ts, $user);
     _sqlswitch('base', defined $base, $sql, \@args, $base);
     db()->do($sql, {}, @args);
-    '{"status":"success"}';
+    _writejson({status => 'success'});
 }
 
 1;
