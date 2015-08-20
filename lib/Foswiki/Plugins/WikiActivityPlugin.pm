@@ -146,7 +146,7 @@ sub _sqlswitch {
     my ($group, $state, $sql, $params, @args) = @_;
     $_[2] =~ s!#$group\{(.*?)\}!
         $state ? ( push(@$params, @args), $1 ) : ''
-    !gx;
+    !eg;
 }
 
 =begin TML
@@ -198,13 +198,15 @@ sub restSubscribedEventsGrouped {
     my ($session, $subject, $verb, $response) = @_;
     my $q = $session->{request};
     my $user = $session->{user};
-    my $sql = "SELECT *, max(event_time) OVER (PARTITION BY base) AS maxtime FROM events WHERE base IN (SELECT base FROM events JOIN subscriptions USING base WHERE user_id = ?#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} ORDER BY maxtime DESC";
+    my $sql = "SELECT *, max(event_time) OVER (PARTITION BY base) AS maxtime FROM events e WHERE base IN (SELECT base FROM events JOIN subscriptions USING (base) WHERE user_id = ?#unread{ AND event_time > read_before}#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerunread{ AND event_time > (SELECT read_before FROM subscriptions WHERE user_id=? AND base=e.base)}#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} ORDER BY maxtime DESC, event_time DESC";
     my @args = ($user);
-    _sqlswitch('from', $q->param('from'), $sql, \@args, $q->param('from'));
-    _sqlswitch('to', $q->param('to'), $sql, \@args, $q->param('to'));
+    _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
+    _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
+    _sqlswitch('to', defined $q->param('to'), $sql, \@args, $q->param('to'));
     push @args, ($q->param('count') || 20), ($q->param('offset') || 0);
-    _sqlswitch('outerfrom', $q->param('outerfrom'), $sql, \@args, $q->param('outerfrom'));
-    _sqlswitch('outerto', $q->param('outerto'), $sql, \@args, $q->param('outerto'));
+    _sqlswitch('outerunread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args, $user);
+    _sqlswitch('outerfrom', defined $q->param('outerfrom'), $sql, \@args, $q->param('outerfrom'));
+    _sqlswitch('outerto', defined $q->param('outerto'), $sql, \@args, $q->param('outerto'));
     my $events = db()->selectall_arrayref($sql, {Slice => {}}, @args);
     to_json({
         status => 'success',
@@ -219,10 +221,11 @@ sub restSubscribedEvents {
     my $offset = $q->param('offset') || 0;
     my $count = $q->param('count') || 10;
 
-    my $sql = "SELECT * from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
+    my $sql = "SELECT * from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
     my @params = ($session->{user});
-    _sqlswitch('from', $q->param('from'), $sql, \@params, $q->param('from'));
-    _sqlswitch('to', $q->param('to'), $sql, \@params, $q->param('to'));
+    _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@params);
+    _sqlswitch('from', defined $q->param('from'), $sql, \@params, $q->param('from'));
+    _sqlswitch('to', defined $q->param('to'), $sql, \@params, $q->param('to'));
     push @params, $count, $offset;
 
     my $res = db()->selectall_arrayref($sql, {Slice => {}}, @params);
@@ -241,6 +244,7 @@ sub restSubscribe {
         base => $base,
         user_id => $user,
         sub_type => 'subscription',
+        one_time => 0,
     });
     '{"status":"success"}';
 }
@@ -263,8 +267,8 @@ sub restUpdateSubscription {
     # Rewind timestamp: useful for testing or reviewing past events
     $ts += time if $ts =~ /^-/;
 
-    my $sql = "UPDATE subscriptions SET read_before=? WHERE user_id=?#base{ AND base=?}";
-    my @args = ($ts);
+    my $sql = "UPDATE subscriptions SET read_before=to_timestamp(?) WHERE user_id=?#base{ AND base=?}";
+    my @args = ($ts, $user);
     _sqlswitch('base', defined $base, $sql, \@args, $base);
     db()->do($sql, {}, @args);
     '{"status":"success"}';
