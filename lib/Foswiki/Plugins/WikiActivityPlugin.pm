@@ -30,7 +30,7 @@ my @schema_updates = (
             base TEXT NOT NULL,
             user_id TEXT NOT NULL,
             sub_type TEXT NOT NULL,
-            one_time BOOLEAN NOT NULL,
+            one_time BOOLEAN NOT NULL DEFAULT 0,
             read_before TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP,
             UNIQUE (base, user_id, sub_type)
         )",
@@ -51,6 +51,7 @@ my @schema_updates = (
         "CREATE INDEX events_time ON events (event_time)",
     ],
 );
+
 sub initPlugin {
     my ( $topic, $web, $user, $installWeb ) = @_;
 
@@ -60,7 +61,6 @@ sub initPlugin {
         return 0;
     }
 
-    #Foswiki::Func::registerTagHandler( 'EXAMPLETAG', \&_EXAMPLETAG );
     Foswiki::Func::registerRESTHandler( 'subscribe', \&restSubscribe,
         authenticate => 1,
         validate => 0,
@@ -94,10 +94,6 @@ sub initPlugin {
     $json = JSON->new;
     return 1;
 }
-
-#sub _EXAMPLETAG {
-#    my($session, $params, $topic, $web, $topicObject) = @_;
-#}
 
 sub finishPlugin {
     undef $db;
@@ -190,6 +186,14 @@ sub addEvent {
 
 ---++ StaticMethod addSubscription( %opts )
 
+Subscribes a user to an event base. =%opts= contains the following keys:
+
+   * =user_id= (optional): the ID of the target user; defaults to the current session's user.
+   * =base= (required): the base to subscribe to.
+   * =sub_type= (required): type of subscription (to distinguish different ways of getting subscribed).
+   * =one_time= (required): enable to automatically drop the subscription when the user marks it as read (not implemented yet).
+   * =read_before= (optional): customize the time from which events on the base will be considered unread. Defaults to now.
+
 =cut
 
 sub addSubscription {
@@ -204,6 +208,7 @@ sub addSubscription {
     _insert('subscriptions', \%record);
 }
 
+# send JSON result
 sub _writejson {
     my ($q, $resp, $data) = @_;
     $json->pretty(scalar $q->param('prettyjson'));
