@@ -159,7 +159,7 @@ sub _sqlswitch {
 
 Adds an event to the database. =%opts= contains the following keys:
 
-   * =actor_id= (optional): the ID of the acting user; defaults to the current session's user.
+   * =user= (optional): the ID of the acting user; defaults to the current session's user.
    * =base= (required): the base object for this event, i.e. the origin topic. Other bases may exist depending on consumers of this API; they must make sure to not conflict with valid topic names. Example: 'news:15'
    * =title= (required): the title for this event or, more specifically, the base object this event relates to.
    * =topic= (optional): the concrete topic being affected. In a forking workflow, this might refer to the TALK topic being edited, while =base= refers to the workflow origin (the non-TALK topic).
@@ -188,7 +188,7 @@ sub addEvent {
 
 Subscribes a user to an event base. =%opts= contains the following keys:
 
-   * =user_id= (optional): the ID of the target user; defaults to the current session's user.
+   * =user= (optional): the ID of the target user; defaults to the current session's user.
    * =base= (required): the base to subscribe to.
    * =sub_type= (required): type of subscription (to distinguish different ways of getting subscribed).
    * =one_time= (required): enable to automatically drop the subscription when the user marks it as read (not implemented yet).
@@ -206,6 +206,24 @@ sub addSubscription {
     $record{read_before} = $opts{read_before} if defined $opts{read_before};
     # TODO: handle unique constraint violations
     _insert('subscriptions', \%record);
+}
+
+=begin TML
+
+---++ StaticMethod removeSubscription( %opts )
+
+Unsubscribes a user from an event base. =%opts= contains the following keys:
+
+   * =user= (optional): the ID of the target user; defaults to the current session's user.
+   * =base= (required): the base to unsubscribe from.
+
+=cut
+
+sub removeSubscription {
+    my %opts = @_;
+    my $user = $opts{user} || $Foswiki::Plugins::SESSION->{user};
+    my $base = $opts{base};
+    db()->do("DELETE FROM subscriptions WHERE user=? AND base=?", {}, $user, $base);
 }
 
 # send JSON result
