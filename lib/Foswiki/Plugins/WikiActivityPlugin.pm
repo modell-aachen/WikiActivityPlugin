@@ -59,8 +59,31 @@ sub initPlugin {
     }
 
     #Foswiki::Func::registerTagHandler( 'EXAMPLETAG', \&_EXAMPLETAG );
-    #Foswiki::Func::registerRESTHandler( 'example', \&restExample );
-
+    Foswiki::Func::registerRESTHandler( 'subscribe', \&restSubscribe,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST',
+    );
+    Foswiki::Func::registerRESTHandler( 'unsubscribe', \&restUnsubscribe,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST',
+    );
+    Foswiki::Func::registerRESTHandler( 'update_subscription', \&restUpdateSubscription,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST',
+    );
+    Foswiki::Func::registerRESTHandler( 'subscribed_events_grouped', \&restSubscribedEventsGrouped,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST,GET',
+    );
+    Foswiki::Func::registerRESTHandler( 'subscribed_events', \&restSubscribedEvents,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST,GET',
+    );
     return 1;
 }
 
@@ -111,9 +134,19 @@ sub _applySchema {
         $db->commit;
     }
 }
+# Quick&dirty insert helper
 sub _insert {
     my ($table, $record) = @_;
     db()->do("INSERT INTO $table (". join(',', keys %$record) .") VALUES(". join(',', map { '?' } keys %$record) .")", {}, values %$record);
+}
+# Mangle placeholders in SQL template
+# Finds a named group: #foo{...} in the template and either keeps it (and adds
+# variable binds to the existing list) or removes it
+sub _sqlswitch {
+    my ($group, $state, $sql, $params, @args) = @_;
+    $_[2] =~ s!#$group\{(.*?)\}!
+        $state ? ( push(@$params, @args), $1 ) : ''
+    !gx;
 }
 
 =begin TML
@@ -161,10 +194,80 @@ sub addSubscription {
     _insert('subscriptions', \%record);
 }
 
+sub restSubscribedEventsGrouped {
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+    my $user = $session->{user};
+    my $sql = "SELECT *, max(event_time) OVER (PARTITION BY base) AS maxtime FROM events WHERE base IN (SELECT base FROM events JOIN subscriptions USING base WHERE user_id = ?#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} ORDER BY maxtime DESC";
+    my @args = ($user);
+    _sqlswitch('from', $q->param('from'), $sql, \@args, $q->param('from'));
+    _sqlswitch('to', $q->param('to'), $sql, \@args, $q->param('to'));
+    push @args, ($q->param('count') || 20), ($q->param('offset') || 0);
+    _sqlswitch('outerfrom', $q->param('outerfrom'), $sql, \@args, $q->param('outerfrom'));
+    _sqlswitch('outerto', $q->param('outerto'), $sql, \@args, $q->param('outerto'));
+    my $events = db()->selectall_arrayref($sql, {Slice => {}}, @args);
+    to_json({
+        status => 'success',
+        data => $events,
+    });
+}
 
+sub restSubscribedEvents {
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+
+    my $offset = $q->param('offset') || 0;
+    my $count = $q->param('count') || 10;
+
+    my $sql = "SELECT * from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
+    my @params = ($session->{user});
+    _sqlswitch('from', $q->param('from'), $sql, \@params, $q->param('from'));
+    _sqlswitch('to', $q->param('to'), $sql, \@params, $q->param('to'));
+    push @params, $count, $offset;
+
+    my $res = db()->selectall_arrayref($sql, {Slice => {}}, @params);
+    to_json({
+        status => 'success',
+        data => $res,
+    });
+}
+
+sub restSubscribe {
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+    my $user = $session->{user};
+    my $base = $q->param('base');
+    _insert('subscriptions', {
+        base => $base,
+        user_id => $user,
+        sub_type => 'subscription',
+    });
+    '{"status":"success"}';
+}
+sub restUnsubscribe {
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+    my $user = $session->{user};
+    my $base = $q->param('base');
+    db()->do("DELETE FROM subscriptions WHERE base=? AND user_id=?", {},
+        $base, $user
+    );
+    '{"status":"success"}';
+}
 sub restUpdateSubscription {
-   my ( $session, $subject, $verb, $response ) = @_;
-   # TODO: timestamp etc.
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+    my $user = $session->{user};
+    my $base = $q->param('base');
+    my $ts = $q->param('ts') || time;
+    # Rewind timestamp: useful for testing or reviewing past events
+    $ts += time if $ts =~ /^-/;
+
+    my $sql = "UPDATE subscriptions SET read_before=? WHERE user_id=?#base{ AND base=?}";
+    my @args = ($ts);
+    _sqlswitch('base', defined $base, $sql, \@args, $base);
+    db()->do($sql, {}, @args);
+    '{"status":"success"}';
 }
 
 1;
