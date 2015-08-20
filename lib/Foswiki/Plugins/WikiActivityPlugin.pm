@@ -39,6 +39,7 @@ my @schema_updates = (
         "CREATE TABLE events (
             id SERIAL PRIMARY KEY,
             base TEXT NOT NULL,
+            title TEXT NOT NULL,
             topic TEXT,
             actor_id TEXT NOT NULL,
             verb TEXT NOT NULL,
@@ -164,6 +165,7 @@ Adds an event to the database. =%opts= contains the following keys:
 
    * =actor_id= (optional): the ID of the acting user; defaults to the current session's user.
    * =base= (required): the base object for this event, i.e. the origin topic. Other bases may exist depending on consumers of this API; they must make sure to not conflict with valid topic names. Example: 'news:15'
+   * =title= (required): the title for this event or, more specifically, the base object this event relates to.
    * =topic= (optional): the concrete topic being affected. In a forking workflow, this might refer to the TALK topic being edited, while =base= refers to the workflow origin (the non-TALK topic).
    * =verb= (required): the action performed, as a textual ID. Examples: 'edit', 'approve'
    * =details= (optional): a JSON string containing arbitrary extra information about the event.
@@ -178,6 +180,7 @@ sub addEvent {
     $record{actor_id} = $opts{user} || $Foswiki::Plugins::SESSION->{user};
     $record{base} = $opts{base};
     $record{topic} = $opts{topic} if exists $opts{topic};
+    $record{title} = $opts{title};
     $record{verb} = $opts{verb};
     $record{details} = $opts{details} if exists $opts{details};
     _insert('events', \%record);
@@ -239,6 +242,7 @@ sub restSubscribedEventsGrouped {
             base => $b,
             mintime => $buckets{$b}[0]{mintime},
             maxtime => $buckets{$b}[0]{maxtime},
+            title => $buckets{$b}[0]{title},
             events => $buckets{$b},
         };
     }
