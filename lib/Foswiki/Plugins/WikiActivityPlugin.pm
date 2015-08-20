@@ -18,6 +18,7 @@ our $SHORTDESCRIPTION = 'Tracks activity in the wiki and offers a query/presenta
 our $NO_PREFS_IN_TOPIC = 1;
 
 my $db;
+my $json;
 my %schema_versions;
 my @schema_updates = (
     [
@@ -84,6 +85,7 @@ sub initPlugin {
         validate => 0,
         http_allow => 'POST,GET',
     );
+    $json = JSON->new;
     return 1;
 }
 
@@ -194,6 +196,14 @@ sub addSubscription {
     _insert('subscriptions', \%record);
 }
 
+sub _writejson {
+    my ($q, $resp, $data) = @_;
+    $json->pretty(scalar $q->param('prettyjson'));
+    $resp->header(-type => 'application/json');
+    $resp->body($json->encode($data));
+    return;
+}
+
 sub restSubscribedEventsGrouped {
     my ($session, $subject, $verb, $response) = @_;
     my $q = $session->{request};
@@ -208,9 +218,23 @@ sub restSubscribedEventsGrouped {
     _sqlswitch('outerfrom', defined $q->param('outerfrom'), $sql, \@args, $q->param('outerfrom'));
     _sqlswitch('outerto', defined $q->param('outerto'), $sql, \@args, $q->param('outerto'));
     my $events = db()->selectall_arrayref($sql, {Slice => {}}, @args);
-    to_json({
+    my $grouped_events = [];
+    my @bases;
+    my %buckets;
+    for my $e (@$events) {
+        my $base = $e->{base};
+        if (!$buckets{$base}) {
+            push @bases, $base;
+            $buckets{$base} = [];
+        }
+        push @{$buckets{$base}}, $e;
+    }
+    for my $b (keys %buckets) {
+        push @$grouped_events, $buckets{$b} ;
+    }
+    _writejson($q, $response, {
         status => 'success',
-        data => $events,
+        data => $grouped_events,
     });
 }
 
@@ -229,7 +253,7 @@ sub restSubscribedEvents {
     push @params, $count, $offset;
 
     my $res = db()->selectall_arrayref($sql, {Slice => {}}, @params);
-    to_json({
+    _writejson($q, $response, {
         status => 'success',
         data => $res,
     });
