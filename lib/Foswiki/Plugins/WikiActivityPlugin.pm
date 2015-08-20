@@ -213,7 +213,7 @@ sub restSubscribedEventsGrouped {
     my ($session, $subject, $verb, $response) = @_;
     my $q = $session->{request};
     my $user = $session->{user};
-    my $sql = "SELECT *, FLOOR(EXTRACT(EPOCH FROM e.event_time AT TIME ZONE 'Z')) AS event_time, max(FLOOR(EXTRACT(EPOCH FROM event_time AT TIME ZONE 'Z'))) OVER pb AS maxtime, min(FLOOR(EXTRACT(EPOCH FROM event_time AT TIME ZONE 'Z'))) OVER pb AS mintime FROM events e WHERE base IN (SELECT base FROM events JOIN subscriptions USING (base) WHERE user_id = ?#unread{ AND event_time > read_before}#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerunread{ AND event_time > (SELECT read_before FROM subscriptions WHERE user_id=? AND base=e.base)}#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} WINDOW pb AS (PARTITION BY base) ORDER BY maxtime DESC, base, e.event_time DESC";
+    my $sql = "SELECT *, FLOOR(EXTRACT(EPOCH FROM e.event_time::timestamptz)) AS event_time, max(FLOOR(EXTRACT(EPOCH FROM event_time::timestamptz))) OVER pb AS maxtime, min(FLOOR(EXTRACT(EPOCH FROM event_time::timestamptz))) OVER pb AS mintime FROM events e WHERE base IN (SELECT base FROM events JOIN subscriptions USING (base) WHERE user_id = ?#unread{ AND event_time > read_before}#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerunread{ AND event_time > (SELECT read_before FROM subscriptions WHERE user_id=? AND base=e.base)}#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} WINDOW pb AS (PARTITION BY base) ORDER BY maxtime DESC, base, e.event_time DESC";
     my @args = ($user);
     _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
     _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
@@ -255,7 +255,7 @@ sub restSubscribedEvents {
     my $offset = $q->param('offset') || 0;
     my $count = $q->param('count') || 10;
 
-    my $sql = "SELECT DISTINCT e.*, FLOOR(EXTRACT(EPOCH FROM e.event_time AT TIME ZONE 'Z')) AS event_time from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
+    my $sql = "SELECT DISTINCT e.*, FLOOR(EXTRACT(EPOCH FROM e.event_time::timestamptz)) AS event_time from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
     my @args = ($session->{user});
     _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
     _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
