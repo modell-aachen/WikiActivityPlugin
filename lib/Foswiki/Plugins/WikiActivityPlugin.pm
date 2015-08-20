@@ -85,6 +85,11 @@ sub initPlugin {
         validate => 0,
         http_allow => 'POST,GET',
     );
+    Foswiki::Func::registerRESTHandler( 'subscribed_events_count', \&restSubscribedEventsCount,
+        authenticate => 1,
+        validate => 0,
+        http_allow => 'POST,GET',
+    );
     $json = JSON->new;
     return 1;
 }
@@ -248,18 +253,30 @@ sub restSubscribedEvents {
     my $offset = $q->param('offset') || 0;
     my $count = $q->param('count') || 10;
 
-    my $sql = "SELECT * from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
-    my @params = ($session->{user});
-    _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@params);
-    _sqlswitch('from', defined $q->param('from'), $sql, \@params, $q->param('from'));
-    _sqlswitch('to', defined $q->param('to'), $sql, \@params, $q->param('to'));
-    push @params, $count, $offset;
+    my $sql = "SELECT DISTINCT e.* from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
+    my @args = ($session->{user});
+    _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
+    _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
+    _sqlswitch('to', defined $q->param('to'), $sql, \@args, $q->param('to'));
+    push @args, $count, $offset;
 
-    my $res = db()->selectall_arrayref($sql, {Slice => {}}, @params);
+    my $res = db()->selectall_arrayref($sql, {Slice => {}}, @args);
     _writejson($q, $response, {
         status => 'success',
         data => $res,
     });
+}
+
+sub restSubscribedEventsCount {
+    my ($session, $subject, $verb, $response) = @_;
+    my $q = $session->{request};
+
+    my $sql = "SELECT COUNT(e.id) AS total_events, COUNT(DISTINCT e.base) AS event_bases FROM events e JOIN subscriptions s USING (base) WHERE s.user_id=?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)}";
+    my @args = $session->{user};
+    _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
+    _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
+    _sqlswitch('to', defined $q->param('to'), $sql, \@args, $q->param('to'));
+    _writejson($q, $response, db()->selectrow_hashref($sql, {}, @args));
 }
 
 sub restSubscribe {
