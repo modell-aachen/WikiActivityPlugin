@@ -208,7 +208,7 @@ sub restSubscribedEventsGrouped {
     my ($session, $subject, $verb, $response) = @_;
     my $q = $session->{request};
     my $user = $session->{user};
-    my $sql = "SELECT *, max(event_time) OVER (PARTITION BY base) AS maxtime FROM events e WHERE base IN (SELECT base FROM events JOIN subscriptions USING (base) WHERE user_id = ?#unread{ AND event_time > read_before}#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerunread{ AND event_time > (SELECT read_before FROM subscriptions WHERE user_id=? AND base=e.base)}#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} ORDER BY maxtime DESC, event_time DESC";
+    my $sql = "SELECT *, max(event_time) OVER (PARTITION BY base) AS maxtime FROM events e WHERE base IN (SELECT base FROM events JOIN subscriptions USING (base) WHERE user_id = ?#unread{ AND event_time > read_before}#from{ AND event_time >= to_timestamp(?)}#to{ AND event_time <= to_timestamp(?)} GROUP BY base ORDER BY MAX(event_time) DESC LIMIT ? OFFSET ?)#outerunread{ AND event_time > (SELECT read_before FROM subscriptions WHERE user_id=? AND base=e.base)}#outerfrom{ AND event_time >= to_timestamp(?)}#outerto{ AND event_time <= to_timestamp(?)} ORDER BY maxtime DESC, base, event_time DESC";
     my @args = ($user);
     _sqlswitch('unread', defined $q->param('all') ? !$q->param('all') : 1, $sql, \@args);
     _sqlswitch('from', defined $q->param('from'), $sql, \@args, $q->param('from'));
@@ -230,7 +230,10 @@ sub restSubscribedEventsGrouped {
         push @{$buckets{$base}}, $e;
     }
     for my $b (keys %buckets) {
-        push @$grouped_events, $buckets{$b} ;
+        push @$grouped_events, {
+            base => $b,
+            events => $buckets{$b},
+        };
     }
     _writejson($q, $response, {
         status => 'success',
