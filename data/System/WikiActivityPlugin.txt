@@ -1,7 +1,118 @@
 %META:TOPICPARENT{name="Plugins"}%
 ---+ !WikiActivityPlugin
 
-%SHORTDESCRIPTION%
+This plugin combines an events API available to other plugins with a
+pre-implemented user interface for viewing the data recorded via the API.
+
+The central unit of data in this plugin is the _event_ – an action performed
+by a user on some element of the wiki that we are interested in informing
+users about, for example:
+
+   * a topic was edited.
+   * a workflow action was performed.
+   * a comment was posted.
+   * an attachment was uploaded/updated.
+   * a task was created/updated/closed.
+
+Events are not detected by !WikiActivityPlugin itself; rather, other plugins
+can use its API to record events in a database.
+
+The following fields exist in an event:
+
+   * =base=: the "main" topic this event relates to. For comments, tasks or attachments, this is the containing topic. When workflows are involved, the base is always the origin topic in the workflow, i.e. not a forked/discussion topic. In the future, non-topic bases might be used, too, e.g. for storing events relating to external objects and resources.
+   * =title=: the title of the base.
+   * =topic= (optional): the exact topic the event relates to. In a workflow, this might be the discussion topic.
+   * =actor_id=: the cUID of the user who triggered this event.
+   * =verb=: the type of event (topic edited; workflow action performed, etc.)
+   * =details=: a JSON string containing arbitrary additional information
+     about the event.
+   * =event_time=: the time at which the event happened.
+
+(The fields =actor_id= and =event_time= are filled in automatically by the API
+if no value is provided.)
+
+In addition, !WikiActivityPlugin manages subscriptions to event bases: a user
+can opt to be notified about all events pertaining to a specific base.
+Subscriptions maintain a timestamp to track which events a user has already
+read; by default, only unread events will be returned/shown.
+
+---++ API for plugins
+
+API documentation is available at
+[[System.PerlDoc?module=Foswiki::Plugins::WikiActivityPlugin]] if the plugin
+is installed.
+
+---++ REST interface
+
+Clients can query information about events and manage subscriptions.
+
+You may use GET or POST requests for endpoints that only retrieve information;
+endpoints that update data require POST.
+
+An endpoint's parameters are standard query parameters or value in the POST
+body.
+
+---+++ =subscribe=
+
+Used for manually subscribing to a new base.
+
+   * =base=: The base to subscribe to.
+
+---+++ =unsubscribe=
+
+Used for manually unsubscribing from a base.
+
+   * =base=: The base to unsubscribe from. Omit to unsubscribe from *all* bases.
+
+---+++ =update_subscription=
+
+Update a subscription's timestamp to indicate which events you have read.
+
+   * =base=: The affected base. Omit to update the timestamp for *all* subscriptions.
+   * =ts=: The timestamp (UNIX epoch). Omit to use the current time. Use a negative value to subtract from the current time.
+
+---+++ =subscribed_events_count=
+
+Returns the number of events pertaining to the user's subscriptions.
+Specifically, returns the number of individual events and also the number of
+bases that have matching events.
+
+   * =all=: Set to '1' to include information about unread *and* read events.  Defaults to unread events only.
+   * =from=: Earliest event timestamp to consider. Defaults to the beginning of time.
+   * =to=: Latest event timestamp to consider. Defaults to the heat death of the universe and beyond.
+
+Example return value (indentation added for readability):
+
+<verbatim>
+{
+  "status":"success",
+  "data": {
+    "total_events":"13",
+    "event_bases":"5"
+  }
+}
+</verbatim>
+
+---+++ =subscribed_events=
+
+Return a list of individual events pertaining to the user's subscriptions.
+
+   * =all=: Set to '1' to include information about unread *and* read events.  Defaults to unread events only.
+   * =from=: Earliest event timestamp to consider. Defaults to the beginning of time.
+   * =to=: Latest event timestamp to consider. Defaults to the heat death of the universe and beyond.
+   * =count=: Number of events to return, defaults to 20.
+   * =offset=: Number of events to skip, defaults to 0.
+
+---+++ =subscribed_events_grouped=
+
+Return a list of events pertaining to the user's subscriptions, grouped by
+base.
+
+   * =all=: Set to '1' to include information about unread *and* read events.  Defaults to unread events only.
+   * =from=: Earliest event timestamp to consider. Defaults to the beginning of time.
+   * =to=: Latest event timestamp to consider. Defaults to the heat death of the universe and beyond.
+   * =count=: Number of bases to return, defaults to 20.
+   * =offset=: Number of bases to skip, defaults to 0.
 
 <!--
 One line description, required for extensions repository catalog.

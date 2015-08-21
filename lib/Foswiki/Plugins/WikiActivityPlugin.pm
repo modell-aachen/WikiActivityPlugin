@@ -280,7 +280,7 @@ sub restSubscribedEvents {
     my $q = $session->{request};
 
     my $offset = $q->param('offset') || 0;
-    my $count = $q->param('count') || 10;
+    my $count = $q->param('count') || 20;
 
     my $sql = "SELECT DISTINCT e.*, FLOOR(EXTRACT(EPOCH FROM e.event_time::timestamptz)) AS event_time from events e JOIN subscriptions s USING (base) WHERE s.user_id = ?#unread{ AND e.event_time > s.read_before}#from{ AND e.event_time >= to_timestamp(?)}#to{ AND e.event_time <= to_timestamp(?)} ORDER BY e.event_time DESC LIMIT ? OFFSET ?";
     my @args = ($session->{user});
