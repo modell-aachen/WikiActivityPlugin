@@ -30,7 +30,7 @@ my @schema_updates = (
             base TEXT NOT NULL,
             user_id TEXT NOT NULL,
             sub_type TEXT NOT NULL,
-            one_time BOOLEAN NOT NULL DEFAULT 0,
+            one_time BOOLEAN NOT NULL DEFAULT '0',
             read_before TIMESTAMP NOT NULL DEFAULT LOCALTIMESTAMP,
             UNIQUE (base, user_id, sub_type)
         )",
