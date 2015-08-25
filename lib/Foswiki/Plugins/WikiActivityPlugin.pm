@@ -319,7 +319,7 @@ sub restSubscribe {
         base => $base,
         sub_type => 'subscription',
     );
-    _writejson({status => 'success'});
+    _writejson($q, $response, {status => 'success'});
 }
 sub restUnsubscribe {
     my ($session, $subject, $verb, $response) = @_;
@@ -329,7 +329,7 @@ sub restUnsubscribe {
     db()->do("DELETE FROM subscriptions WHERE base=? AND user_id=?", {},
         $base, $user
     );
-    _writejson({status => 'success'});
+    _writejson($q, $response, {status => 'success'});
 }
 sub restUpdateSubscription {
     my ($session, $subject, $verb, $response) = @_;
@@ -344,7 +344,7 @@ sub restUpdateSubscription {
     my @args = ($ts, $user);
     _sqlswitch('base', defined $base, $sql, \@args, $base);
     db()->do($sql, {}, @args);
-    _writejson({status => 'success'});
+    _writejson($q, $response, {status => 'success'});
 }
 
 1;
