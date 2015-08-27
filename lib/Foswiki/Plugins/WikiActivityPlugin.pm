@@ -260,7 +260,7 @@ sub restSubscribedEventsGrouped {
         }
         push @{$buckets{$base}}, $e;
     }
-    for my $b (keys %buckets) {
+    for my $b (@bases) {
         push @$grouped_events, {
             base => $b,
             mintime => $buckets{$b}[0]{mintime},
