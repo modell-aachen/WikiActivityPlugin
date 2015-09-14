@@ -231,7 +231,7 @@ sub _writejson {
     my ($q, $resp, $data) = @_;
     $json->pretty(scalar $q->param('prettyjson'));
     $resp->header(-type => 'application/json');
-    $resp->body($json->encode($data));
+    $resp->print($json->encode($data));
     return;
 }
 
