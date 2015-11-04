@@ -114,6 +114,21 @@ base.
    * =count=: Number of bases to return, defaults to 20.
    * =offset=: Number of bases to skip, defaults to 0.
 
+---++ =AUTOSUBSCRIBE=
+
+If you want to automatically subscribe all users to newly created topics, add<pre>
+   &#42; AUTOSUBSCRIBE = all
+</pre>
+to your template's preferences.
+
+You can also set<pre>
+   &#42; AUTOSUBSCRIBE = MyImportantNews
+</pre>
+and only people who have set<pre>
+   &#42; SUBSCRIPTIONS = MyImportantNews
+</pre>
+on their personal page will automatically be subscribed. You can add multiple subscriptions (comma separated). If you have not set this variable at all, you will be subscribed to everything.
+
 <!--
 One line description, required for extensions repository catalog.
    * Set SHORTDESCRIPTION = %$SHORTDESCRIPTION%

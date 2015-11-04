@@ -17,6 +17,8 @@ our $RELEASE = '0.1';
 our $SHORTDESCRIPTION = 'Tracks activity in the wiki and offers a query/presentation interface';
 our $NO_PREFS_IN_TOPIC = 1;
 
+our $newTopic;
+
 my $db;
 my $json;
 my %schema_versions;
@@ -345,6 +347,42 @@ sub restUpdateSubscription {
     _sqlswitch('base', defined $base, $sql, \@args, $base);
     db()->do($sql, {}, @args);
     _writejson($q, $response, {status => 'success'});
+}
+
+sub beforeSaveHandler {
+    my ( $text, $topic, $web ) = @_;
+
+    $newTopic = (Foswiki::Func::topicExists($web, $topic) ? 0 : 1);
+}
+
+sub afterSaveHandler {
+    my ( $text, $topic, $web, $error, $meta ) = @_;
+
+    return unless $newTopic;
+    my $auto = $meta->get('PREFERENCE', 'AUTOSUBSCRIBE');
+    return unless $auto && $auto->{value};
+    $auto = $auto->{value};
+
+    my $date = $meta->getRevisionInfo()->{date};
+
+    my $it = Foswiki::Func::eachUser();
+    while ( $it->hasNext() ) {
+        my $user = $it->next();
+        if($auto ne 'all') {
+            my ($meta, undef) = Foswiki::Func::readTopic($Foswiki::cfg{UsersWebName}, $user);
+            my $subscriptions = $meta->get('PREFERENCE', 'SUBSCRIPTIONS');
+            if($subscriptions) {
+                next unless scalar grep(m/^\Q$auto\E$/, split(m/\s*,\s*/, $subscriptions->{value}));
+            }
+        }
+        my $id = Foswiki::Func::getCanonicalUserID($user);
+        addSubscription(
+            user => $id,
+            base => "$web.$topic",
+            sub_type => 'autosub',
+            read_before => Foswiki::Time::formatTime($date, '$year-$mo-$day $hours:$minutes:$seconds'),
+        );
+    }
 }
 
 1;
